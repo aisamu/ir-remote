@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3f5f0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101713" media="(prefers-color-scheme: dark)">
+  <title>Consul remote · C1F07ABANA</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23215c48'/%3E%3Cpath d='M16 6v10m-6-7a10 10 0 1 0 12 0' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      --canvas: #f3f5f0;
+      --surface: #fff;
+      --fg: #1d2c25;
+      --muted: #52645a;
+      --accent: #205d46;
+      --on-accent: #fff;
+      --line: #ced9d0;
+      --disabled: #e7ece6;
+      --disabled-fg: #68756d;
+      --hover: #edf4ec;
+      --accent-hover: #184a37;
+      --active: #deeadb;
+      --warning: #88601d;
+      --sending: #fff3db;
+      --error: #af312b;
+      --focus: #ac6a12;
+      color: var(--fg);
+      background: var(--canvas);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas: #101713;
+        --surface: #1a251e;
+        --fg: #e4eee6;
+        --muted: #a7b8ac;
+        --accent: #92d5a9;
+        --on-accent: #10291c;
+        --line: #35473b;
+        --disabled: #1d2821;
+        --disabled-fg: #849b89;
+        --hover: #26392b;
+        --accent-hover: #aeebc2;
+        --active: #304735;
+        --warning: #efd08a;
+        --sending: #392f1b;
+        --error: #ffaaa2;
+        --focus: #efc474;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px max(14px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+    main { width: 100%; max-width: 440px; margin: 0 auto; }
+    h1, h2, p { margin: 0; }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    h1 { font-size: 1.5rem; font-weight: 650; letter-spacing: -.045rem; }
+    .model { color: var(--muted); font-size: .75rem; letter-spacing: .035em; }
+    .connection { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 12px; margin: 20px 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+    .connection-heading { display: flex; align-items: center; gap: 5px 10px; flex-wrap: wrap; }
+    .connection h2 { font-size: .8125rem; font-weight: 600; }
+    #status { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .75rem; }
+    #status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    body[data-state="connected"] #status { color: var(--accent); }
+    body[data-state="connecting"] #status, body[data-state="sending"] #status { color: var(--warning); }
+    body[data-state="error"] #status { color: var(--error); }
+    #device-detail { grid-column: 1 / -1; color: var(--muted); font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
+    body[data-state="connected"] #device-detail, body[data-state="sending"] #device-detail { display: none; }
+    button { font: inherit; -webkit-tap-highlight-color: transparent; touch-action: manipulation; cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
+    button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+    [hidden] { display: none !important; }
+    .connection-actions { grid-column: 2; grid-row: 1; display: flex; }
+    .connection-actions button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 10px; color: var(--on-accent); background: var(--accent); font-size: .8125rem; font-weight: 600; }
+    .connection-actions button:disabled { color: var(--disabled-fg); border-color: var(--line); background: var(--disabled); }
+    #disconnect { color: var(--accent); border-color: var(--line); background: var(--surface); }
+    #message { grid-column: 1 / -1; min-height: 3em; margin-top: 2px; color: var(--muted); font-size: .8125rem; line-height: 1.5; overflow-wrap: anywhere; }
+    body[data-state="error"] #message { color: var(--error); }
+    .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .command { display: flex; min-width: 0; min-height: 108px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; color: var(--accent); background: var(--surface); text-align: left; transition: background .15s, border-color .15s; }
+    .command svg { width: 26px; height: 26px; margin-bottom: 3px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .command-name { color: var(--fg); font-size: .9375rem; font-weight: 600; line-height: 1.25; }
+    .command-hint { color: var(--muted); font-size: .75rem; line-height: 1.35; }
+    .command.power { border-color: var(--accent); color: var(--on-accent); background: var(--accent); }
+    .power .command-name, .power .command-hint { color: inherit; }
+    .command:disabled { color: var(--disabled-fg); border-color: var(--line); background: var(--disabled); }
+    .command:disabled .command-name, .command:disabled .command-hint { color: var(--disabled-fg); }
+    .command[data-sending] { border-color: var(--warning); background: var(--sending); color: var(--warning); }
+    .command[data-sending] .command-name, .command[data-sending] .command-hint { color: inherit; }
+    @media (hover: hover) {
+      .command:not(:disabled):hover { background: var(--hover); border-color: var(--accent); }
+      .power:not(:disabled):hover, .connection-actions button:not(:disabled):hover { background: var(--accent-hover); color: var(--on-accent); }
+    }
+    .command:not(:disabled):active { background: var(--active); }
+    .power:not(:disabled):active { background: var(--accent-hover); }
+    .guidance { margin: 14px 2px 0; color: var(--muted); font-size: .8125rem; line-height: 1.5; }
+    details { margin-top: 16px; padding-top: 4px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8125rem; line-height: 1.6; }
+    summary { display: list-item; padding: 12px 0; min-height: 48px; cursor: pointer; color: var(--fg); font-weight: 600; }
+    details p { margin: 0 0 12px; }
+    a { color: var(--accent); text-underline-offset: 3px; }
+    noscript p { margin-top: 16px; padding: 12px; border: 1px solid var(--error); border-radius: 10px; color: var(--error); font-size: .875rem; }
+    @media (max-height: 700px) { body { padding-top: 14px; } .connection { margin-top: 14px; } .command { min-height: 98px; padding: 12px; } }
+    @media (min-width: 600px) and (min-height: 701px) { body { padding-top: 48px; } }
+    @media (prefers-reduced-motion: reduce) { .command { transition: none; } }
+  </style>
+</head>
+<body data-state="disconnected">
+  <main>
+    <header>
+      <h1>Consul remote</h1>
+      <p class="model">C1F07ABANA</p>
+    </header>
+
+    <section class="connection" aria-labelledby="connection-title">
+      <div class="connection-heading">
+        <h2 id="connection-title">USB blaster</h2>
+        <span id="status">Disconnected</span>
+      </div>
+      <p id="device-detail">ELKSMART USB-C IR blaster</p>
+      <div class="connection-actions">
+        <button id="connect" type="button">Connect USB blaster</button>
+        <button id="disconnect" type="button" hidden>Disconnect</button>
+      </div>
+      <p id="message" role="status" aria-atomic="true">Plug in the blaster, then connect to enable the controls.</p>
+    </section>
+
+    <section id="buttons" class="controls" aria-label="Appliance commands" aria-describedby="ir-guidance">
+      <button class="command power" type="button" data-command="power" disabled>
+        <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 3v12M9 7a12 12 0 1 0 14 0"/></svg>
+        <span class="command-name">Power</span>
+        <span class="command-hint">Toggle on / off</span>
+      </button>
+      <button class="command" type="button" data-command="speed" disabled>
+        <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="3"/><path d="M14 13c-5-4-5-10 0-10 6 0 7 6 4 10m1 3c6-2 11 1 8 6-3 5-9 3-10-3m-3-1c-1 6-6 9-9 4-3-5 2-9 8-8"/></svg>
+        <span class="command-name">Fan speed</span>
+        <span class="command-hint">Next speed</span>
+      </button>
+      <button class="command" type="button" data-command="timer" disabled>
+        <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="18" r="10"/><path d="M16 12v6l4 3M12 3h8M16 3v5M24 7l2 2"/></svg>
+        <span class="command-name">Timer</span>
+        <span class="command-hint">Next setting</span>
+      </button>
+      <button class="command" type="button" data-command="humidify" disabled>
+        <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 3C13 8 6 15 6 20a10 10 0 0 0 20 0c0-5-7-12-10-17Z"/><path d="M11 20a5 5 0 0 0 5 5"/></svg>
+        <span class="command-name">Humidifier</span>
+        <span class="command-hint">Toggle on / off</span>
+      </button>
+      <button class="command" type="button" data-command="horizontal" disabled>
+        <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M4 16h24M9 11l-5 5 5 5m14-10 5 5-5 5M12 5h8M12 27h8"/></svg>
+        <span class="command-name">Horizontal swing</span>
+        <span class="command-hint">Toggle swing</span>
+      </button>
+      <button class="command" type="button" data-command="vertical" disabled>
+        <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 4v24M11 9l5-5 5 5M11 23l5 5 5-5M5 12v8M27 12v8"/></svg>
+        <span class="command-name">Vertical swing</span>
+        <span class="command-hint">Toggle swing</span>
+      </button>
+    </section>
+
+    <p class="guidance" id="ir-guidance">Point the blaster at the cooler. Each tap sends one command. IR is one-way: check the cooler itself for its current setting.</p>
+
+    <details>
+      <summary>Connection help &amp; limitations</summary>
+      <p>Use a <a href="https://developer.chrome.com/docs/capabilities/usb">WebUSB-capable browser</a>, such as Chrome on Android or a desktop Chromium browser. Android requires USB host support. If Samsung Browser does not show a USB chooser, open the page in the full Chrome app. Safari and iOS are not supported.</p>
+      <p>Open this page over HTTPS, or use localhost on the computer serving it. A file opened directly from storage is not the supported setup. No app or account is needed.</p>
+      <p>Connecting does not send IR. An acknowledgement confirms the blaster accepted a command, not that the cooler received it. If a send fails, check the cooler before retrying: repeating a toggle can undo the action.</p>
+    </details>
+    <noscript><p>JavaScript must be enabled to connect to the USB blaster. No commands have been sent.</p></noscript>
+  </main>
+  <script id="remote-config" type="application/json">{"appliance":"Consul C1F07ABANA","device":{"vendorId":1116,"productId":306,"protocol":"D552","hello":[252,252,252,252],"identityReply":[252,252,252,252,112,1],"identityAck":[250,250,250,250],"firmwarePrefix":[250,250,250,250],"transmitAck":[255,255,255,255],"chunkGapMs":2.0},"commands":{"power":{"frames":[[255,255,255,255,214,239,9,255,113,36,107,35,36,255,255,255,137,72,225,35,35,36,0,0,35,36,36,36,36,36,36,36,36,36,36,36,35,36,36,107,35,107,35,107,36,107,35,107,36,107,1,36,36,36,107,36,36,36,36,36,36,36,221],[36,1,36,36,1,36,36,36,107,36,107,36,107,36,107,36,35,36,144,198,2,144,72,230,17,36,197,240,5,133,72,230,17,35,195,240,5,136,72,229,17,36,202,240,5,150,72,228,17,36,201,240,5,141,72,229,17,36,144,78]],"durationMs":565},"speed":{"frames":[[255,255,255,255,214,239,9,255,113,36,36,35,36,255,255,255,137,72,225,35,35,36,0,0,35,36,36,36,36,36,36,36,36,36,36,36,35,36,36,107,35,107,35,107,36,107,35,107,36,107,1,36,36,36,107,1,1,36,36,36,36,36,50],[107,36,107,36,107,36,36,36,107,36,107,36,107,36,107,36,35,36,144,198,2,144,72,230,17,36,197,240,5,133,72,230,17,35,195,240,5,136,72,229,17,36,202,240,5,150,72,228,17,36,201,240,5,141,72,229,17,36,144,78]],"durationMs":565},"timer":{"frames":[[255,255,255,255,214,239,9,255,229,36,36,36,36,255,255,255,142,73,183,35,0,1,36,36,36,36,36,36,0,1,36,36,36,37,35,35,36,106,36,106,36,106,36,106,36,106,36,106,36,35,36,106,36,106,36,36,36,36,0,36,36,36,213],[107,34,106,1,36,36,36,106,36,106,36,106,36,106,36,35,36,220,195,2,153,73,192,17,36,170,236,5,147,73,188,17,36,144,78]],"durationMs":239},"horizontal":{"frames":[[255,255,255,255,214,239,9,255,9,36,36,35,36,255,255,255,137,72,225,35,35,36,0,0,35,36,36,36,36,36,36,36,36,36,36,36,35,36,36,107,35,107,35,107,36,107,35,107,36,107,1,36,107,1,1,1,36,36,36,36,36,107,49],[36,107,1,36,107,36,107,36,107,36,107,36,107,36,35,36,144,198,2,144,72,230,17,36,197,240,5,133,72,230,17,35,195,240,5,136,72,229,17,36,202,240,5,150,72,228,17,36,201,240,5,141,72,229,17,36,144,78]],"durationMs":565},"vertical":{"frames":[[255,255,255,255,214,239,9,255,241,36,36,35,36,255,255,255,137,72,225,35,35,36,0,0,35,36,36,36,36,36,36,36,36,36,36,36,35,36,36,107,35,107,35,107,36,107,35,107,36,107,36,107,36,107,1,1,1,36,36,36,36,36,222],[107,36,36,1,36,107,36,107,36,107,36,107,36,107,36,35,36,144,198,2,144,72,230,17,36,197,240,5,133,72,230,17,35,195,240,5,136,72,229,17,36,202,240,5,150,72,228,17,36,201,240,5,141,72,229,17,36,144,78]],"durationMs":565},"humidify":{"frames":[[255,255,255,255,214,239,9,255,113,36,36,35,36,255,255,255,137,72,225,35,35,36,0,0,35,36,36,36,36,36,36,36,36,36,36,36,35,36,36,107,35,107,35,107,36,107,35,107,36,107,36,107,36,107,36,107,1,1,36,36,36,36,217],[36,107,36,36,1,36,36,36,107,36,107,36,107,36,107,36,35,36,144,198,2,144,72,230,17,36,197,240,5,133,72,230,17,35,195,240,5,136,72,229,17,36,202,240,5,150,72,228,17,36,201,240,5,141,72,229,17,36,144,78]],"durationMs":565}}}</script>
+  <script>
+(() => {
+  "use strict";
+
+  const connectButton = document.getElementById("connect");
+  const disconnectButton = document.getElementById("disconnect");
+  const status = document.getElementById("status");
+  const message = document.getElementById("message");
+  const deviceDetail = document.getElementById("device-detail");
+  const commandButtons = Array.from(document.querySelectorAll("button[data-command]"));
+  const initialDetail = deviceDetail.textContent;
+  const commandNames = ["power", "speed", "timer", "horizontal", "vertical", "humidify"];
+  const ioTimeoutMs = 1500;
+  let state = "disconnected";
+  let busy = false;
+  let supported = false;
+  let session = null;
+  let activeButton = null;
+  let sendFailure = null;
+  let config;
+  let protocol;
+  let commands;
+
+  function render(nextState = state, text) {
+    state = nextState;
+    document.body.dataset.state = state;
+    status.textContent = state[0].toUpperCase() + state.slice(1);
+    if (text !== undefined) message.textContent = text;
+    const ready = Boolean(session && session.ready && !session.unplugged);
+    connectButton.hidden = ready;
+    connectButton.disabled = !supported || busy || session !== null;
+    disconnectButton.hidden = !ready;
+    disconnectButton.disabled = busy || !ready;
+    for (const button of commandButtons) {
+      button.disabled = !ready || busy;
+      button.toggleAttribute("data-sending", button === activeButton);
+      button.setAttribute("aria-busy", String(button === activeButton));
+    }
+  }
+
+  function bytes(value, name) {
+    if (!Array.isArray(value) || value.length === 0 ||
+        value.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255)) {
+      throw new Error(`Invalid ${name} bytes in the remote configuration.`);
+    }
+    return Uint8Array.from(value);
+  }
+
+  function equal(actual, expected) {
+    return actual.length === expected.length && expected.every((byte, index) => actual[index] === byte);
+  }
+
+  function hex(data) {
+    return Array.from(data, byte => byte.toString(16).padStart(2, "0")).join(" ");
+  }
+
+  function describe(error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  function delay(milliseconds) {
+    return new Promise(resolve => setTimeout(resolve, milliseconds));
+  }
+
+  // The caller must close the device on rejection, including a timeout. Racing
+  // a WebUSB transfer alone does not cancel it or prevent it consuming a reply.
+  async function bounded(action, label, timeoutMs = ioTimeoutMs) {
+    let timer;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(action),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`${label} timed out.`)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function assertActive(target) {
+    if (target !== session || target.unplugged) {
+      throw new Error("The USB blaster was unplugged.");
+    }
+  }
+
+  async function operation(target, action, label, timeoutMs) {
+    assertActive(target);
+    const result = await bounded(action, label, timeoutMs);
+    assertActive(target);
+    return result;
+  }
+
+  async function write(target, packet, label) {
+    const result = await operation(target,
+      () => target.device.transferOut(target.outgoing.endpointNumber, packet), label);
+    if (result.status !== "ok" || result.bytesWritten !== packet.byteLength) {
+      throw new Error(`${label} failed (${result.status}; ${result.bytesWritten} of ${packet.byteLength} bytes written).`);
+    }
+  }
+
+  async function read(target, label, timeoutMs = ioTimeoutMs) {
+    const result = await operation(target,
+      () => target.device.transferIn(target.incoming.endpointNumber, target.incoming.packetSize),
+      label, timeoutMs);
+    if (result.status !== "ok" || !result.data) {
+      throw new Error(`${label} failed (${result.status}).`);
+    }
+    return new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
+  }
+
+  function bulkPair(configuration) {
+    for (const usbInterface of configuration.interfaces) {
+      for (const alternate of usbInterface.alternates) {
+        const incoming = alternate.endpoints.find(endpoint => endpoint.type === "bulk" && endpoint.direction === "in");
+        const outgoing = alternate.endpoints.find(endpoint => endpoint.type === "bulk" && endpoint.direction === "out");
+        if (incoming && outgoing && incoming.packetSize > 0) {
+          return { configuration, usbInterface, alternate, incoming, outgoing };
+        }
+      }
+    }
+    return null;
+  }
+
+  function close(target) {
+    target.ready = false;
+    if (!target.closePromise) {
+      target.closePromise = target.device
+        ? bounded(() => target.device.close(), "Closing the USB connection")
+        : Promise.resolve();
+    }
+    return target.closePromise;
+  }
+
+  async function dispose(target) {
+    let detail = "";
+    try {
+      await close(target);
+    } catch (error) {
+      if (!target.unplugged) {
+        detail = ` ${describe(error)} Unplug the blaster before connecting again.`;
+      }
+    }
+    // A failed close must not allow a new session to race an outstanding I/O.
+    // Physical removal also ends that session, even if close rejects afterwards.
+    if ((!detail || target.unplugged) && session === target) session = null;
+    deviceDetail.textContent = initialDetail;
+    return detail;
+  }
+
+  function connectionError(error) {
+    const detail = describe(error);
+    if (error && error.name === "SecurityError") {
+      return `USB access was blocked. Open this page directly on HTTPS or localhost and allow USB access in the browser. ${detail}`;
+    }
+    return `Could not connect: ${detail} Check the USB connection, browser permission, and whether another app or tab is using the blaster.`;
+  }
+
+  async function connect() {
+    if (!supported || busy || session !== null) return;
+    busy = true;
+    sendFailure = null;
+    const target = { device: null, ready: false, unplugged: false, closePromise: null };
+    session = target;
+    render("connecting", "Choose the ELKSMART USB blaster in the browser's permission dialog. Connecting does not send infrared.");
+    try {
+      // Open the chooser in the original click task. Awaiting enumeration first
+      // can lose the user activation required by the browser's permission UI.
+      target.device = await navigator.usb.requestDevice({
+        filters: [{ vendorId: config.device.vendorId, productId: config.device.productId }],
+      });
+      if (target.device.vendorId !== config.device.vendorId || target.device.productId !== config.device.productId) {
+        throw new Error("The selected USB device does not match this remote's blaster.");
+      }
+      await operation(target, () => target.device.open(), "Opening the USB blaster");
+      const configurations = target.device.configuration
+        ? [target.device.configuration, ...target.device.configurations.filter(candidate =>
+          candidate.configurationValue !== target.device.configuration.configurationValue)]
+        : target.device.configurations;
+      const endpoints = configurations.map(bulkPair).find(Boolean);
+      if (!endpoints) throw new Error("The USB blaster has no supported bulk IN/OUT interface.");
+      if (!target.device.configuration ||
+          target.device.configuration.configurationValue !== endpoints.configuration.configurationValue) {
+        await operation(target,
+          () => target.device.selectConfiguration(endpoints.configuration.configurationValue),
+          "Selecting the USB configuration");
+      }
+      await operation(target,
+        () => target.device.claimInterface(endpoints.usbInterface.interfaceNumber),
+        "Claiming the USB interface");
+      const claimedInterface = target.device.configuration.interfaces.find(candidate =>
+        candidate.interfaceNumber === endpoints.usbInterface.interfaceNumber);
+      if (!claimedInterface || claimedInterface.alternate.alternateSetting !== endpoints.alternate.alternateSetting) {
+        await operation(target,
+          () => target.device.selectAlternateInterface(endpoints.usbInterface.interfaceNumber, endpoints.alternate.alternateSetting),
+          "Selecting the USB alternate interface");
+      }
+      target.incoming = endpoints.incoming;
+      target.outgoing = endpoints.outgoing;
+      await write(target, protocol.hello, "Blaster identification request");
+      const identity = await read(target, "Blaster identification reply");
+      if (!equal(identity, protocol.identityReply)) {
+        throw new Error(`Unsupported blaster identity: ${hex(identity)}.`);
+      }
+      await write(target, protocol.identityAck, "Blaster identity acknowledgement");
+      const firmware = await read(target, "Blaster firmware reply");
+      const prefixLength = protocol.firmwarePrefix.length;
+      if (firmware.length < prefixLength + 2 ||
+          !equal(firmware.subarray(0, prefixLength), protocol.firmwarePrefix)) {
+        throw new Error(`Unexpected firmware-version reply: ${hex(firmware)}.`);
+      }
+      assertActive(target);
+      target.ready = true;
+      deviceDetail.textContent = `ELKSMART ${config.device.vendorId.toString(16).padStart(4, "0")}:${config.device.productId.toString(16).padStart(4, "0")} · ${config.device.protocol} · firmware ${hex(firmware.subarray(prefixLength, prefixLength + 2))} · USB OUT ${target.outgoing.endpointNumber}, IN ${target.incoming.endpointNumber}`;
+      render("connected", "Blaster identified. Choose one command. Its acknowledgement cannot confirm the appliance's state.");
+    } catch (error) {
+      const noSelection = !target.device && error && error.name === "NotFoundError";
+      const cleanup = await dispose(target);
+      render(noSelection ? "disconnected" : "error", noSelection
+        ? "No USB device selected. If no chooser appeared on Android, open this page in the full Chrome app."
+        : connectionError(error) + cleanup);
+    } finally {
+      busy = false;
+      render();
+    }
+  }
+
+  async function send(button) {
+    if (busy || !session || !session.ready || session.unplugged) return;
+    const command = commands.get(button.dataset.command);
+    if (!command) return;
+    const target = session;
+    const label = button.querySelector(".command-name").textContent.trim();
+    busy = true;
+    activeButton = button;
+    render("sending", `Sending ${label}. Wait for the blaster's acknowledgement and the full signal duration.`);
+    try {
+      for (let index = 0; index < command.frames.length; index += 1) {
+        await write(target, command.frames[index], "IR packet transfer");
+        if (index + 1 < command.frames.length) await delay(config.device.chunkGapMs);
+      }
+      const finalChunkAt = performance.now();
+      const acknowledgement = await read(target, "Transmit acknowledgement", ioTimeoutMs + command.durationMs);
+      if (!equal(acknowledgement, protocol.transmitAck)) {
+        throw new Error(`Unexpected transmit acknowledgement: ${hex(acknowledgement)}.`);
+      }
+      // An early ACK is not evidence that the waveform has finished emitting.
+      let remaining = command.durationMs - (performance.now() - finalChunkAt);
+      while (remaining > 0) {
+        await delay(Math.ceil(remaining));
+        assertActive(target);
+        remaining = command.durationMs - (performance.now() - finalChunkAt);
+      }
+      assertActive(target);
+      render("connected", `Blaster acknowledged ${label}. Check the appliance for its actual state.`);
+    } catch (error) {
+      sendFailure = `${label}: outcome unknown. Do not blindly retry a toggle. ${describe(error)}`;
+      const cleanup = await dispose(target);
+      render("error", sendFailure + cleanup);
+    } finally {
+      activeButton = null;
+      busy = false;
+      render();
+    }
+  }
+
+  async function disconnect() {
+    if (busy || !session) return;
+    busy = true;
+    const target = session;
+    target.ready = false;
+    render(sendFailure ? "error" : "disconnected", sendFailure || "Closing the USB connection. No infrared is sent.");
+    const cleanup = await dispose(target);
+    busy = false;
+    render(sendFailure || cleanup ? "error" : "disconnected",
+      (sendFailure || (cleanup ? "Could not release the USB connection."
+        : "USB connection closed. Reconnect explicitly to use the remote.")) + cleanup);
+  }
+
+  function unplug(event) {
+    const target = session;
+    if (!target || event.device !== target.device) return;
+    target.unplugged = true;
+    target.ready = false;
+    if (activeButton) {
+      const label = activeButton.querySelector(".command-name").textContent.trim();
+      sendFailure = `${label}: the USB blaster was unplugged; outcome unknown. Do not blindly retry a toggle.`;
+    }
+    const text = sendFailure || "USB blaster unplugged. Reconnect explicitly when it is attached again.";
+    render(sendFailure ? "error" : "disconnected", text);
+    deviceDetail.textContent = initialDetail;
+    if (busy) {
+      // Closing aborts a pending read or write. The owning operation will dispose
+      // the same session and retain its connection or unknown-outcome error.
+      close(target).catch(() => {});
+      return;
+    }
+    busy = true;
+    render();
+    dispose(target).then(() => {
+      busy = false;
+      render(sendFailure ? "error" : "disconnected", text);
+    });
+  }
+
+  render();
+  try {
+    config = JSON.parse(document.getElementById("remote-config").textContent);
+    if (!config.device || !Number.isInteger(config.device.vendorId) ||
+        !Number.isInteger(config.device.productId) ||
+        !Number.isFinite(config.device.chunkGapMs) || config.device.chunkGapMs <= 0) {
+      throw new Error("Invalid device configuration.");
+    }
+    protocol = Object.fromEntries(
+      ["hello", "identityReply", "identityAck", "firmwarePrefix", "transmitAck"].map(name =>
+        [name, bytes(config.device[name], name)]));
+    commands = new Map(commandNames.map(name => {
+      const command = config.commands[name];
+      if (!command || !Array.isArray(command.frames) || command.frames.length === 0 ||
+          !Number.isFinite(command.durationMs) || command.durationMs <= 0) {
+        throw new Error(`Invalid ${name} command configuration.`);
+      }
+      return [name, { frames: command.frames.map(frame => bytes(frame, name)), durationMs: command.durationMs }];
+    }));
+  } catch (error) {
+    render("error", `This remote's bundled configuration is invalid. ${describe(error)}`);
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    render("error", "WebUSB requires a secure origin. Use http://127.0.0.1 or http://localhost on this computer, or HTTPS on a phone. Plain HTTP over Wi-Fi does not work.");
+    return;
+  }
+  if (!navigator.usb || typeof navigator.usb.requestDevice !== "function") {
+    render("error", "This browser does not support WebUSB. Use a desktop Chromium browser with WebUSB or Chrome on Android. Safari and iOS browsers are unsupported.");
+    return;
+  }
+  const permissionsPolicy = document.permissionsPolicy || document.featurePolicy;
+  if (permissionsPolicy && !permissionsPolicy.allowsFeature("usb")) {
+    render("error", "This page's permissions policy blocks USB. Open it directly rather than inside an embedded frame, on HTTPS or localhost with USB access allowed.");
+    return;
+  }
+  supported = true;
+  connectButton.addEventListener("click", connect);
+  disconnectButton.addEventListener("click", disconnect);
+  navigator.usb.addEventListener("disconnect", unplug);
+  for (const button of commandButtons) {
+    button.addEventListener("click", () => send(button));
+    button.addEventListener("keydown", event => {
+      if (event.repeat && (event.key === "Enter" || event.key === " ")) event.preventDefault();
+    });
+  }
+  render("disconnected", "Connect the USB blaster, then choose Connect to grant browser access. No infrared is sent until you choose a command.");
+})();
+
+</script>
+</body>
+</html>
